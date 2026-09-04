@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WKT → KML</title>
+<style>
+  @font-face {
+    font-family: 'Plex Sans';
+    src: local('IBM Plex Sans');
+  }
+
+  :root{
+    --ink:#0f1b1d;
+    --panel:#152325;
+    --panel-raised:#1b2c2e;
+    --line: rgba(237,234,224,0.09);
+    --line-strong: rgba(237,234,224,0.18);
+    --text:#ede9de;
+    --text-dim:#9fb0ac;
+    --brass:#c3924c;
+    --brass-dim:#8a6a38;
+    --ok:#71a98c;
+    --err:#c1584a;
+    --mono: 'IBM Plex Mono', 'Courier New', monospace;
+    --sans: 'IBM Plex Sans', -apple-system, 'Segoe UI', sans-serif;
+  }
+
+  *{ box-sizing:border-box; }
+
+  html,body{
+    margin:0; padding:0;
+    background:var(--ink);
+    color:var(--text);
+    font-family:var(--sans);
+    min-height:100vh;
+  }
+
+  body{
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 28px 28px;
+    background-position: -1px -1px;
+  }
+
+  .wrap{
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 40px 24px 64px;
+  }
+
+  header{
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap: 24px;
+    border-bottom: 1px solid var(--line-strong);
+    padding-bottom: 20px;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+  }
+
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:14px;
+  }
+
+  .rose{ width:40px; height:40px; flex-shrink:0; }
+
+  h1{
+    font-size: 26px;
+    letter-spacing: 0.2px;
+    margin:0;
+    font-weight:600;
+    color: var(--text);
+  }
+
+  h1 span{ color: var(--brass); }
+
+  .tagline{
+    margin:2px 0 0;
+    font-size: 13.5px;
+    color: var(--text-dim);
+    max-width: 46ch;
+  }
+
+  .coord-readout{
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    text-align:right;
+    line-height:1.6;
+  }
+
+  .coord-readout b{ color: var(--brass); font-weight:600; }
+
+  main{
+    display:grid;
+    grid-template-columns: 1fr 30px 1fr;
+    gap: 0;
+    align-items: stretch;
+  }
+
+  @media (max-width: 880px){
+    main{ grid-template-columns: 1fr; }
+    .divider{ display:none; }
+  }
+
+  .panel{
+    background: var(--panel);
+    border: 1px solid var(--line-strong);
+    display:flex;
+    flex-direction:column;
+    min-height: 480px;
+  }
+
+  .panel-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding: 12px 16px;
+    border-bottom:1px solid var(--line-strong);
+    background: var(--panel-raised);
+  }
+
+  .panel-head .label{
+    font-size:12.5px;
+    color: var(--text-dim);
+    font-weight:500;
+  }
+
+  .panel-head .count{
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--text-dim);
+  }
+
+  textarea, .output-body{
+    flex:1;
+    background: transparent;
+    border:none;
+    outline:none;
+    resize:none;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13.5px;
+    line-height: 1.65;
+    padding: 16px;
+    width: 100%;
+  }
+
+  .output-body{
+    white-space: pre;
+    overflow:auto;
+    color: var(--text-dim);
+  }
+
+  .output-body.has-content{ color: var(--text); }
+
+  textarea::placeholder{ color: #55645f; }
+
+  .divider{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    position:relative;
+  }
+
+  .divider::before{
+    content:"";
+    position:absolute;
+    top:0; bottom:0; left:50%;
+    width:1px;
+    background: repeating-linear-gradient(
+      to bottom,
+      var(--line-strong) 0, var(--line-strong) 4px,
+      transparent 4px, transparent 10px
+    );
+  }
+
+  .divider .arrow{
+    position:relative;
+    z-index:1;
+    background: var(--ink);
+    color: var(--brass);
+    width: 26px;
+    height: 26px;
+    border: 1px solid var(--brass-dim);
+    border-radius: 50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size: 13px;
+  }
+
+  .toolbar{
+    display:flex;
+    gap:8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--line-strong);
+    background: var(--panel-raised);
+    flex-wrap:wrap;
+  }
+
+  button{
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight:500;
+    padding: 8px 14px;
+    border-radius: 3px;
+    border: 1px solid var(--line-strong);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+  }
+
+  button:hover{ border-color: var(--brass-dim); }
+
+  button.primary{
+    background: var(--brass);
+    color: #1a1206;
+    border-color: var(--brass);
+    font-weight:600;
+  }
+
+  button.primary:hover{ background: #d3a35f; }
+
+  button:disabled{
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .examples{
+    display:flex;
+    gap:8px;
+    margin-left:auto;
+    flex-wrap:wrap;
+  }
+
+  .examples button{
+    font-size:12px;
+    padding:7px 10px;
+    color: var(--text-dim);
+  }
+
+  .status-row{
+    margin-top: 14px;
+    min-height: 20px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+  }
+
+  .status-ok{ color: var(--ok); }
+  .status-err{ color: var(--err); white-space:pre-wrap; }
+
+  footer{
+    margin-top: 40px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--text-dim);
+    display:flex;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+
+  footer code{
+    font-family: var(--mono);
+    color: var(--text);
+    background: var(--panel-raised);
+    padding: 1px 5px;
+    border-radius: 2px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <svg class="rose" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="32" cy="32" r="28" stroke="#c3924c" stroke-width="1.2" opacity="0.6"/>
+        <path d="M32 6 L36 30 L32 34 L28 30 Z" fill="#c3924c"/>
+        <path d="M32 58 L28 34 L32 30 L36 34 Z" fill="#8a6a38"/>
+        <path d="M6 32 L30 28 L34 32 L30 36 Z" fill="#8a6a38"/>
+        <path d="M58 32 L34 36 L30 32 L34 28 Z" fill="#8a6a38"/>
+      </svg>
+      <div>
+        <h1>WKT <span>→</span> KML</h1>
+        <p class="tagline">Paste Well-Known Text geometries and get back a ready-to-open KML document — parsed and rendered entirely in your browser.</p>
+      </div>
+    </div>
+    <div class="coord-readout" id="readout">
+      <div>types supported</div>
+      <div><b>POINT · LINESTRING · POLYGON</b></div>
+      <div><b>MULTI* · GEOMETRYCOLLECTION</b></div>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <div class="panel-head">
+        <span class="label">WKT input</span>
+        <span class="count" id="inputCount">0 geometries</span>
+      </div>
+      <textarea id="wktInput" spellcheck="false" placeholder="POINT (30 10)
+LINESTRING (30 10, 10 30, 40 40)
+Zoo boundary|POLYGON ((30 10, 40 40, 20 40, 10 20, 30 10))
+
+One geometry per line. Prefix a line with a name and | or ; to label the placemark."></textarea>
+      <div class="toolbar">
+        <button class="primary" id="convertBtn">Convert</button>
+        <button id="clearBtn">Clear</button>
+        <div class="examples">
+          <button data-ex="point">Point</button>
+          <button data-ex="line">Line</button>
+          <button data-ex="polygon">Polygon w/ hole</button>
+          <button data-ex="multi">Multi + collection</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"><div class="arrow">→</div></div>
+
+    <section class="panel">
+      <div class="panel-head">
+        <span class="label">KML output</span>
+        <span class="count" id="outputCount">—</span>
+      </div>
+      <div class="output-body" id="kmlOutput">Converted KML will appear here.</div>
+      <div class="toolbar">
+        <button id="copyBtn" disabled>Copy</button>
+        <button id="downloadBtn" disabled>Download .kml</button>
+      </div>
+    </section>
+  </main>
+
+  <div class="status-row" id="status"></div>
+
+  <footer>
+    <span>Runs client-side — nothing you paste leaves this page.</span>
+    <span>Line format: <code>name|WKT</code> or plain <code>WKT</code></span>
+  </footer>
+
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// WKT parsing
+// ---------------------------------------------------------------------------
+
+class WKTParseError extends Error {}
+
+function splitTopLevel(s, sep = ",") {
+  const parts = [];
+  let depth = 0, buf = "";
+  for (const ch of s) {
+    if (ch === "(") { depth++; buf += ch; }
+    else if (ch === ")") { depth--; buf += ch; }
+    else if (ch === sep && depth === 0) { parts.push(buf.trim()); buf = ""; }
+    else { buf += ch; }
+  }
+  if (buf.trim() !== "" || parts.length === 0) parts.push(buf.trim());
+  return parts.filter(p => p.length > 0 || parts.length === 1);
+}
+
+function stripOuterParens(s) {
+  s = s.trim();
+  if (s.startsWith("(") && s.endsWith(")")) return s.slice(1, -1).trim();
+  throw new WKTParseError(`Expected parenthesized group, got: ${s}`);
+}
+
+function parseCoordList(s) {
+  const coords = [];
+  for (const pair of splitTopLevel(s, ",")) {
+    const nums = pair.split(/\s+/).filter(Boolean);
+    if (nums.length < 2) throw new WKTParseError(`Bad coordinate: ${pair}`);
+    const x = parseFloat(nums[0]), y = parseFloat(nums[1]);
+    const z = nums.length > 2 ? parseFloat(nums[2]) : null;
+    coords.push([x, y, z]);
+  }
+  return coords;
+}
+
+function parseWKT(wkt) {
+  wkt = wkt.trim().replace(/;$/, "").trim();
+  const m = wkt.match(/^([A-Za-z]+)\s*(Z|M|ZM)?\s*\(([\s\S]*)\)$/i);
+  if (!m) throw new WKTParseError(`Unrecognized WKT: ${wkt}`);
+  const gtype = m[1].toUpperCase();
+  const body = "(" + m[3] + ")";
+
+  if (gtype === "POINT") {
+    return { type: "Point", coordinates: parseCoordList(stripOuterParens(body))[0] };
+  }
+  if (gtype === "LINESTRING") {
+    return { type: "LineString", coordinates: parseCoordList(stripOuterParens(body)) };
+  }
+  if (gtype === "POLYGON") {
+    const inner = stripOuterParens(body);
+    const rings = splitTopLevel(inner).map(r => parseCoordList(stripOuterParens(r)));
+    return { type: "Polygon", rings };
+  }
+  if (gtype === "MULTIPOINT") {
+    const inner = stripOuterParens(body);
+    const pts = splitTopLevel(inner).map(part => {
+      part = part.trim();
+      if (part.startsWith("(")) part = stripOuterParens(part);
+      return parseCoordList(part)[0];
+    });
+    return { type: "MultiPoint", coordinates: pts };
+  }
+  if (gtype === "MULTILINESTRING") {
+    const inner = stripOuterParens(body);
+    const lines = splitTopLevel(inner).map(p => parseCoordList(stripOuterParens(p)));
+    return { type: "MultiLineString", lines };
+  }
+  if (gtype === "MULTIPOLYGON") {
+    const inner = stripOuterParens(body);
+    const polygons = splitTopLevel(inner).map(polyStr => {
+      polyStr = stripOuterParens(polyStr);
+      return splitTopLevel(polyStr).map(r => parseCoordList(stripOuterParens(r)));
+    });
+    return { type: "MultiPolygon", polygons };
+  }
+  if (gtype === "GEOMETRYCOLLECTION") {
+    const inner = stripOuterParens(body);
+    const geometries = splitTopLevel(inner).map(g => parseWKT(g));
+    return { type: "GeometryCollection", geometries };
+  }
+  throw new WKTParseError(`Unsupported geometry type: ${gtype}`);
+}
+
+// ---------------------------------------------------------------------------
+// KML generation
+// ---------------------------------------------------------------------------
+
+function escapeXml(s) {
+  return String(s).replace(/[<>&'"]/g, c => ({
+    "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;"
+  }[c]));
+}
+
+function coordsStr(coords) {
+  return coords.map(([x, y, z]) => `${x},${y},${z !== null && z !== undefined ? z : 0}`).join(" ");
+}
+
+function ringKml(coords, tag = "outerBoundaryIs") {
+  return `<${tag}><LinearRing><coordinates>${coordsStr(coords)}</coordinates></LinearRing></${tag}>`;
+}
+
+function geometryToKmlGeom(geom) {
+  const t = geom.type;
+  if (t === "Point") {
+    const [x, y, z] = geom.coordinates;
+    return `<Point><coordinates>${x},${y},${z !== null && z !== undefined ? z : 0}</coordinates></Point>`;
+  }
+  if (t === "LineString") {
+    return `<LineString><coordinates>${coordsStr(geom.coordinates)}</coordinates></LineString>`;
+  }
+  if (t === "Polygon") {
+    const rings = geom.rings;
+    let parts = [ringKml(rings[0], "outerBoundaryIs")];
+    for (let i = 1; i < rings.length; i++) parts.push(ringKml(rings[i], "innerBoundaryIs"));
+    return `<Polygon>${parts.join("")}</Polygon>`;
+  }
+  if (t === "MultiPoint") {
+    const pts = geom.coordinates.map(([x, y, z]) =>
+      `<Point><coordinates>${x},${y},${z !== null && z !== undefined ? z : 0}</coordinates></Point>`
+    ).join("");
+    return `<MultiGeometry>${pts}</MultiGeometry>`;
+  }
+  if (t === "MultiLineString") {
+    const lines = geom.lines.map(line =>
+      `<LineString><coordinates>${coordsStr(line)}</coordinates></LineString>`
+    ).join("");
+    return `<MultiGeometry>${lines}</MultiGeometry>`;
+  }
+  if (t === "MultiPolygon") {
+    const polys = geom.polygons.map(rings => {
+      let parts = [ringKml(rings[0], "outerBoundaryIs")];
+      for (let i = 1; i < rings.length; i++) parts.push(ringKml(rings[i], "innerBoundaryIs"));
+      return `<Polygon>${parts.join("")}</Polygon>`;
+    }).join("");
+    return `<MultiGeometry>${polys}</MultiGeometry>`;
+  }
+  if (t === "GeometryCollection") {
+    return `<MultiGeometry>${geom.geometries.map(geometryToKmlGeom).join("")}</MultiGeometry>`;
+  }
+  throw new WKTParseError(`Cannot render geometry type: ${t}`);
+}
+
+function placemarkKml(geom, name) {
+  const nameTag = name ? `<name>${escapeXml(name)}</name>` : "";
+  return `<Placemark>${nameTag}${geometryToKmlGeom(geom)}</Placemark>`;
+}
+
+function wktToKmlDocument(entries, docName = "WKT Conversion") {
+  const placemarks = entries.map(({ name, wkt }) => placemarkKml(parseWKT(wkt), name));
+  return '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<kml xmlns="http://www.opengis.net/kml/2.2">\n' +
+    `<Document><name>${escapeXml(docName)}</name>${placemarks.join("")}</Document>\n` +
+    "</kml>\n";
+}
+
+// ---------------------------------------------------------------------------
+// Input parsing (textarea lines -> entries), tolerant of blank/comment lines
+// ---------------------------------------------------------------------------
+
+function parseInputLines(raw) {
+  const lines = raw.split("\n");
+  const entries = [];
+  let counter = 0;
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    counter++;
+    let name = null, wkt = line;
+    for (const sep of ["|", ";"]) {
+      if (line.includes(sep)) {
+        const idx = line.indexOf(sep);
+        const head = line.slice(0, idx).trim();
+        const rest = line.slice(idx + 1).trim();
+        if (/^[A-Za-z]+\s*(Z|M|ZM)?\s*\(/i.test(rest)) {
+          name = head;
+          wkt = rest;
+        }
+        break;
+      }
+    }
+    entries.push({ name: name || `Feature ${counter}`, wkt, raw: rawLine });
+  }
+  return entries;
+}
+
+// ---------------------------------------------------------------------------
+// UI wiring
+// ---------------------------------------------------------------------------
+
+const wktInput = document.getElementById("wktInput");
+const kmlOutput = document.getElementById("kmlOutput");
+const statusEl = document.getElementById("status");
+const inputCount = document.getElementById("inputCount");
+const outputCount = document.getElementById("outputCount");
+const copyBtn = document.getElementById("copyBtn");
+const downloadBtn = document.getElementById("downloadBtn");
+const convertBtn = document.getElementById("convertBtn");
+const clearBtn = document.getElementById("clearBtn");
+
+let lastKml = null;
+
+function updateInputCount() {
+  const n = parseInputLines(wktInput.value).length;
+  inputCount.textContent = `${n} geometr${n === 1 ? "y" : "ies"}`;
+}
+
+function convert() {
+  const entries = parseInputLines(wktInput.value);
+  updateInputCount();
+
+  if (entries.length === 0) {
+    statusEl.innerHTML = '<span class="status-err">Nothing to convert — paste at least one WKT geometry.</span>';
+    kmlOutput.textContent = "Converted KML will appear here.";
+    kmlOutput.classList.remove("has-content");
+    outputCount.textContent = "—";
+    lastKml = null;
+    copyBtn.disabled = true;
+    downloadBtn.disabled = true;
+    return;
+  }
+
+  const errors = [];
+  const good = [];
+  for (const e of entries) {
+    try {
+      parseWKT(e.wkt); // validate individually for per-line error reporting
+      good.push(e);
+    } catch (err) {
+      errors.push(`Line "${e.raw.trim().slice(0, 60)}" — ${err.message}`);
+    }
+  }
+
+  if (good.length > 0) {
+    const kml = wktToKmlDocument(good.map(e => ({ name: e.name, wkt: e.wkt })));
+    lastKml = kml;
+    kmlOutput.textContent = kml;
+    kmlOutput.classList.add("has-content");
+    outputCount.textContent = `${good.length} placemark${good.length === 1 ? "" : "s"}`;
+    copyBtn.disabled = false;
+    downloadBtn.disabled = false;
+  } else {
+    lastKml = null;
+    kmlOutput.textContent = "Converted KML will appear here.";
+    kmlOutput.classList.remove("has-content");
+    outputCount.textContent = "—";
+    copyBtn.disabled = true;
+    downloadBtn.disabled = true;
+  }
+
+  if (errors.length > 0) {
+    statusEl.innerHTML = `<span class="status-err">${errors.length} of ${entries.length} line(s) failed to parse:\n${errors.map(escapeXml).join("\n")}</span>`;
+  } else {
+    statusEl.innerHTML = `<span class="status-ok">Converted ${good.length} of ${entries.length} geometries successfully.</span>`;
+  }
+}
+
+convertBtn.addEventListener("click", convert);
+
+wktInput.addEventListener("input", () => {
+  updateInputCount();
+});
+
+wktInput.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") convert();
+});
+
+clearBtn.addEventListener("click", () => {
+  wktInput.value = "";
+  updateInputCount();
+  kmlOutput.textContent = "Converted KML will appear here.";
+  kmlOutput.classList.remove("has-content");
+  outputCount.textContent = "—";
+  statusEl.innerHTML = "";
+  lastKml = null;
+  copyBtn.disabled = true;
+  downloadBtn.disabled = true;
+});
+
+copyBtn.addEventListener("click", async () => {
+  if (!lastKml) return;
+  try {
+    await navigator.clipboard.writeText(lastKml);
+    const original = copyBtn.textContent;
+    copyBtn.textContent = "Copied";
+    setTimeout(() => { copyBtn.textContent = original; }, 1400);
+  } catch {
+    statusEl.innerHTML = '<span class="status-err">Could not copy automatically — select the output text and copy manually.</span>';
+  }
+});
+
+downloadBtn.addEventListener("click", () => {
+  if (!lastKml) return;
+  const blob = new Blob([lastKml], { type: "application/vnd.google-earth.kml+xml" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "converted.kml";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+
+const EXAMPLES = {
+  point: "City Hall|POINT (30 10)",
+  line: "Trail|LINESTRING (30 10, 10 30, 40 40)",
+  polygon: "Reserve|POLYGON ((35 10, 45 45, 15 40, 10 20, 35 10),(20 30, 35 35, 30 20, 20 30))",
+  multi: `Wells|MULTIPOINT (10 40, 40 30, 20 20, 30 10)
+Routes|MULTILINESTRING ((10 10, 20 20, 10 40),(40 40, 30 30, 40 20, 30 10))
+Mixed|GEOMETRYCOLLECTION (POINT (40 10), LINESTRING (10 10, 20 20, 10 40))`
+};
+
+document.querySelectorAll("[data-ex]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    wktInput.value = EXAMPLES[btn.dataset.ex];
+    updateInputCount();
+    convert();
+  });
+});
+
+updateInputCount();
+</script>
+</body>
+</html>
